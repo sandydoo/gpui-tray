@@ -83,7 +83,7 @@ and validation happen when `.build()` is called:
 
 ```rust,ignore
 let icon = Icon::from_rgba(rgba, 32, 32).build()?;
-let icon = Icon::from_gpui(&image, cx).build()?;
+let icon = Icon::from_gpui(image, cx).build()?;
 ```
 
 Replace an icon with `tray.set_icon(icon, cx)?` or remove it with

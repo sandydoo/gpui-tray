@@ -58,7 +58,7 @@ enum BitmapInput {
         height: u32,
     },
     Gpui {
-        image: gpui::Image,
+        image: Arc<gpui::Image>,
         render: Arc<RenderGpuiImage>,
     },
 }
@@ -104,21 +104,21 @@ impl Icon {
 
     /// Builds an icon from the first frame of a GPUI image, including SVG.
     ///
-    /// Decoding and rendering happen when [`BitmapIconBuilder::build`] is called.
+    /// Decoding and rendering happen in [`BitmapIconBuilder::build`].
     ///
     /// ```no_run
     /// # #[cfg(all(feature = "gpui-kit", not(feature = "gpui")))]
     /// # use gpui_kit_backend as gpui;
     /// # #[cfg(all(feature = "gpui-ce", not(any(feature = "gpui", feature = "gpui-kit"))))]
     /// # use gpui_ce_backend as gpui;
-    /// # fn example(image: &gpui::Image, cx: &gpui::App) -> gpui_tray::Result<()> {
+    /// # fn example(image: std::sync::Arc<gpui::Image>, cx: &gpui::App) -> gpui_tray::Result<()> {
     /// let icon = gpui_tray::Icon::from_gpui(image, cx).build()?;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn from_gpui(image: &gpui::Image, cx: &gpui::App) -> BitmapIconBuilder {
+    pub fn from_gpui(image: impl Into<Arc<gpui::Image>>, cx: &gpui::App) -> BitmapIconBuilder {
         let renderer = cx.svg_renderer();
-        BitmapIconBuilder::from_gpui(image.clone(), move |image| {
+        BitmapIconBuilder::from_gpui(image.into(), move |image| {
             image
                 .to_image_data(renderer.clone())
                 .map_err(|error| Error::InvalidIcon(error.to_string()))
@@ -156,7 +156,7 @@ impl BitmapIconBuilder {
     }
 
     fn from_gpui(
-        image: gpui::Image,
+        image: Arc<gpui::Image>,
         render: impl Fn(&gpui::Image) -> Result<Arc<gpui::RenderImage>> + Send + Sync + 'static,
     ) -> Self {
         Self::new(BitmapInput::Gpui {
@@ -241,9 +241,9 @@ impl BitmapIconBuilder {
 mod tests {
     use super::*;
 
-    fn builder_for_image(image: gpui::Image) -> BitmapIconBuilder {
+    fn builder_for_image(image: impl Into<Arc<gpui::Image>>) -> BitmapIconBuilder {
         let renderer = gpui::SvgRenderer::new(Arc::new(()));
-        BitmapIconBuilder::from_gpui(image, move |image| {
+        BitmapIconBuilder::from_gpui(image.into(), move |image| {
             image
                 .to_image_data(renderer.clone())
                 .map_err(|error| Error::InvalidIcon(error.to_string()))
@@ -276,6 +276,22 @@ mod tests {
         {
             assert_eq!(bitmap.scale, 2.0);
             assert!(bitmap.template);
+        }
+    }
+
+    #[test]
+    fn gpui_builders_share_the_encoded_image() {
+        let image = Arc::new(gpui::Image::empty());
+        let builder = builder_for_image(image.clone());
+        let cloned = builder.clone();
+        for input in [&builder.input, &cloned.input] {
+            let BitmapInput::Gpui {
+                image: retained, ..
+            } = input
+            else {
+                panic!("expected a GPUI image source");
+            };
+            assert!(Arc::ptr_eq(&image, retained));
         }
     }
 
