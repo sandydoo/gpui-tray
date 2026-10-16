@@ -130,7 +130,7 @@ let tray = Tray::builder().icon(icon).build(cx)?;
 For a GPUI image, including SVG:
 
 ```rust,ignore
-let icon = Icon::from_gpui(&image, cx).build()?;
+let icon = Icon::from_gpui(image, cx).build()?;
 ```
 
 ### macOS

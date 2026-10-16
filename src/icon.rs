@@ -55,7 +55,7 @@ enum BitmapInput {
         height: u32,
     },
     Gpui {
-        image: gpui::Image,
+        image: Arc<gpui::Image>,
         renderer: gpui::SvgRenderer,
     },
 }
@@ -101,20 +101,23 @@ impl Icon {
 
     /// Builds an icon from the first frame of a GPUI image, including SVG.
     ///
-    /// Decoding and rendering happen when [`BitmapIconBuilder::build`] is called.
+    /// Decoding and rendering happen in [`BitmapIconBuilder::build`].
     ///
     /// ```no_run
     /// # #[cfg(all(feature = "gpui-kit", not(feature = "gpui")))]
     /// # use gpui_kit_backend as gpui;
     /// # #[cfg(all(feature = "gpui-ce", not(any(feature = "gpui", feature = "gpui-kit"))))]
     /// # use gpui_ce_backend as gpui;
-    /// # fn example(image: &gpui::Image, cx: &gpui::App) -> gpui_tray::Result<()> {
+    /// # fn example(image: std::sync::Arc<gpui::Image>, cx: &gpui::App) -> gpui_tray::Result<()> {
     /// let icon = gpui_tray::Icon::from_gpui(image, cx).build()?;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn from_gpui(image: &gpui::Image, cx: &gpui::App) -> BitmapIconBuilder {
-        BitmapIconBuilder::from_gpui(image.clone(), cx.svg_renderer())
+    pub fn from_gpui(image: impl Into<Arc<gpui::Image>>, cx: &gpui::App) -> BitmapIconBuilder {
+        BitmapIconBuilder::new(BitmapInput::Gpui {
+            image: image.into(),
+            renderer: cx.svg_renderer(),
+        })
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -145,10 +148,6 @@ impl BitmapIconBuilder {
             #[cfg(target_os = "macos")]
             template: false,
         }
-    }
-
-    fn from_gpui(image: gpui::Image, renderer: gpui::SvgRenderer) -> Self {
-        Self::new(BitmapInput::Gpui { image, renderer })
     }
 
     /// Decodes the source image, validates the bitmap, and creates an icon.
@@ -240,7 +239,10 @@ mod tests {
                 174, 66, 96, 130,
             ],
         );
-        let builder = BitmapIconBuilder::from_gpui(image, gpui::SvgRenderer::new(Arc::new(())));
+        let builder = BitmapIconBuilder::new(BitmapInput::Gpui {
+            image: image.into(),
+            renderer: gpui::SvgRenderer::new(Arc::new(())),
+        });
         #[cfg(target_os = "macos")]
         let builder = builder.scale_factor(2.0).template(true);
         let icon = builder.build().unwrap();
@@ -259,11 +261,30 @@ mod tests {
     }
 
     #[test]
+    fn gpui_builders_share_the_encoded_image() {
+        let image = Arc::new(gpui::Image::empty());
+        let builder = BitmapIconBuilder::new(BitmapInput::Gpui {
+            image: image.clone(),
+            renderer: gpui::SvgRenderer::new(Arc::new(())),
+        });
+        let cloned = builder.clone();
+        for input in [&builder.input, &cloned.input] {
+            let BitmapInput::Gpui {
+                image: retained, ..
+            } = input
+            else {
+                panic!("expected a GPUI image source");
+            };
+            assert!(Arc::ptr_eq(&image, retained));
+        }
+    }
+
+    #[test]
     fn gpui_decode_errors_are_reported_by_build() {
-        let builder = BitmapIconBuilder::from_gpui(
-            gpui::Image::empty(),
-            gpui::SvgRenderer::new(Arc::new(())),
-        );
+        let builder = BitmapIconBuilder::new(BitmapInput::Gpui {
+            image: gpui::Image::empty().into(),
+            renderer: gpui::SvgRenderer::new(Arc::new(())),
+        });
         assert!(matches!(builder.build(), Err(Error::InvalidIcon(_))));
     }
 
@@ -273,9 +294,12 @@ mod tests {
             gpui::ImageFormat::Svg,
             br##"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="3"><rect width="2" height="3" fill="#123456"/></svg>"##.to_vec(),
         );
-        let icon = BitmapIconBuilder::from_gpui(image, gpui::SvgRenderer::new(Arc::new(())))
-            .build()
-            .unwrap();
+        let icon = BitmapIconBuilder::new(BitmapInput::Gpui {
+            image: image.into(),
+            renderer: gpui::SvgRenderer::new(Arc::new(())),
+        })
+        .build()
+        .unwrap();
         let bitmap = match icon.source {
             IconSource::Bitmap(bitmap) => bitmap,
             #[cfg(target_os = "macos")]
