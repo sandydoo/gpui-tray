@@ -22,6 +22,7 @@ type MenuBuilder = dyn Fn(&mut gpui::App) -> Vec<gpui::MenuItem>;
 /// `Tray` is intentionally not `Send`: native tray objects and GPUI application
 /// state are bound to the thread on which the tray was built.
 #[derive(Clone)]
+#[must_use = "the tray is removed when its last handle is dropped"]
 pub struct Tray {
     inner: Rc<TrayInner>,
 }
