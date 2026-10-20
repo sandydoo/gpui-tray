@@ -97,7 +97,7 @@ impl WindowsTray {
         if self.closed {
             return Err(Error::Closed);
         }
-        let icon_changed = old.icon_revision != new.icon_revision || old.icon != new.icon;
+        let icon_changed = old.icon != new.icon;
         let menu_changed = old.menu != new.menu;
         let staged_menu = menu_changed
             .then(|| build_menu(new.menu.as_ref()))

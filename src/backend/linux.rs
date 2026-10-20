@@ -267,8 +267,7 @@ fn apply_snapshot(
         let mut state = lock(state);
         let old = &state.tray;
         let changes = (
-            old.icon_revision != snapshot.icon_revision
-                || old.icon != snapshot.icon
+            old.icon != snapshot.icon
                 || old.icon_name != snapshot.icon_name
                 || old.icon_theme_path != snapshot.icon_theme_path,
             old.title != snapshot.title,
@@ -760,7 +759,6 @@ mod tests {
             state: Arc::new(Mutex::new(ServiceState {
                 tray: TraySnapshot {
                     icon: None,
-                    icon_revision: 0,
                     icon_name: None,
                     icon_theme_path: None,
                     title: None,
@@ -805,7 +803,6 @@ mod tests {
             .unwrap();
         let snapshot = TraySnapshot {
             icon: Some(icon),
-            icon_revision: 0,
             icon_name: None,
             icon_theme_path: None,
             title: None,
