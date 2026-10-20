@@ -16,6 +16,10 @@ pub enum Error {
     #[error("invalid icon: {0}")]
     InvalidIcon(String),
 
+    /// A GPUI image could not be decoded or rendered.
+    #[error("invalid icon: {0}")]
+    IconDecode(#[source] std::sync::Arc<dyn std::error::Error + Send + Sync>),
+
     /// The running macOS version could not resolve the requested SF Symbol.
     /// Contains the requested symbol name.
     #[cfg(target_os = "macos")]

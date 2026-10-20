@@ -121,7 +121,7 @@ impl Icon {
         BitmapIconBuilder::from_gpui(image.into(), move |image| {
             image
                 .to_image_data(renderer.clone())
-                .map_err(|error| Error::InvalidIcon(error.to_string()))
+                .map_err(|error| Error::IconDecode(Arc::from(error.into_boxed_dyn_error())))
         })
     }
 
@@ -175,16 +175,17 @@ impl BitmapIconBuilder {
             } => (rgba, width, height),
             BitmapInput::Gpui { image, render } => {
                 let rendered = render(&image)?;
-                let mut rgba = rendered
-                    .as_bytes(0)
-                    .ok_or_else(|| Error::InvalidIcon("GPUI image has no frames".into()))?
-                    .to_vec();
+                let mut rgba = Arc::<[u8]>::from(
+                    rendered
+                        .as_bytes(0)
+                        .ok_or_else(|| Error::InvalidIcon("GPUI image has no frames".into()))?,
+                );
                 let size = rendered.size(0);
                 // GPUI render images are BGRA; native backends receive RGBA.
-                for pixel in rgba.as_chunks_mut::<4>().0 {
+                for pixel in Arc::get_mut(&mut rgba).unwrap().as_chunks_mut::<4>().0 {
                     pixel.swap(0, 2);
                 }
-                (Arc::from(rgba), size.width.into(), size.height.into())
+                (rgba, size.width.into(), size.height.into())
             }
         };
         let bitmap = BitmapIcon {
@@ -246,7 +247,7 @@ mod tests {
         BitmapIconBuilder::from_gpui(image.into(), move |image| {
             image
                 .to_image_data(renderer.clone())
-                .map_err(|error| Error::InvalidIcon(error.to_string()))
+                .map_err(|error| Error::IconDecode(Arc::from(error.into_boxed_dyn_error())))
         })
     }
 
@@ -298,7 +299,10 @@ mod tests {
     #[test]
     fn gpui_decode_errors_are_reported_by_build() {
         let builder = builder_for_image(gpui::Image::empty());
-        assert!(matches!(builder.build(), Err(Error::InvalidIcon(_))));
+        let Err(Error::IconDecode(error)) = builder.build() else {
+            panic!("expected a decoding error");
+        };
+        assert!(error.source().is_some(), "preserve GPUI's source error");
     }
 
     #[test]
