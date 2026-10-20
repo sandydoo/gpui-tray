@@ -83,17 +83,14 @@ impl BitmapData {
         let rendered = image
             .to_image_data(renderer)
             .map_err(|error| BitmapDecodeError::Decode(Arc::from(error.into_boxed_dyn_error())))?;
-        let mut rgba = rendered
-            .as_bytes(0)
-            .ok_or(BitmapDecodeError::NoFrames)?
-            .to_vec();
+        let mut rgba = Arc::<[u8]>::from(rendered.as_bytes(0).ok_or(BitmapDecodeError::NoFrames)?);
         let size = rendered.size(0);
         // GPUI render images are BGRA; native backends receive RGBA.
-        for pixel in rgba.as_chunks_mut::<4>().0 {
+        for pixel in Arc::get_mut(&mut rgba).unwrap().as_chunks_mut::<4>().0 {
             pixel.swap(0, 2);
         }
         Ok(Self {
-            rgba: Arc::from(rgba),
+            rgba,
             width: size.width.into(),
             height: size.height.into(),
         })
