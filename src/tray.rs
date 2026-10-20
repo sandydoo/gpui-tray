@@ -45,9 +45,10 @@ pub struct TrayBuilder {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TraySnapshot {
     pub(crate) icon: Option<Icon>,
-    /// Incremented by every explicit icon replacement or clear, so backends
-    /// reapply the image even when its source compares equal. Native image
+    /// Incremented by every explicit icon replacement or clear, so AppKit
+    /// reapplies the image even when its source compares equal. Native image
     /// equality checks identity and cannot detect edits to the same NSImage.
+    #[cfg(target_os = "macos")]
     pub(crate) icon_revision: u64,
     #[cfg(target_os = "linux")]
     pub(crate) icon_name: Option<String>,
@@ -77,9 +78,11 @@ impl Tray {
         TrayBuilder::default()
     }
 
-    /// Replaces the tray icon, even if the same source was previously installed.
+    /// Replaces the tray icon.
     ///
-    /// On macOS, call this again after editing an icon's native `NSImage`.
+    /// Linux and Windows skip updates when the new icon equals the current one.
+    /// macOS reapplies even an equal icon; call this again after editing its
+    /// native `NSImage`.
     /// Use [`Self::clear_icon`] to remove the image.
     pub fn set_icon(&self, icon: impl Into<Icon>, _cx: &mut gpui::App) -> Result<()> {
         let icon = icon.into();
@@ -217,6 +220,7 @@ impl TrayBuilder {
 
         let snapshot = TraySnapshot {
             icon: self.icon,
+            #[cfg(target_os = "macos")]
             icon_revision: 0,
             #[cfg(target_os = "linux")]
             icon_name: self.icon_name,
@@ -249,7 +253,10 @@ impl TrayBuilder {
 impl TraySnapshot {
     fn replace_icon(&mut self, icon: Option<Icon>) {
         self.icon = icon;
-        self.icon_revision = self.icon_revision.wrapping_add(1);
+        #[cfg(target_os = "macos")]
+        {
+            self.icon_revision = self.icon_revision.wrapping_add(1);
+        }
     }
 }
 
@@ -409,10 +416,11 @@ mod tests {
     }
 
     #[test]
-    fn explicit_icon_updates_invalidate_equal_sources_and_clear() {
+    fn equal_icon_replacements_only_force_refresh_on_macos() {
         let icon = Icon::from_rgba(vec![0; 4], 1, 1).build().unwrap();
         let mut snapshot = TraySnapshot {
             icon: Some(icon.clone()),
+            #[cfg(target_os = "macos")]
             icon_revision: 0,
             #[cfg(target_os = "linux")]
             icon_name: None,
@@ -427,10 +435,13 @@ mod tests {
         let previous = snapshot.clone();
         snapshot.replace_icon(Some(icon));
         assert_eq!(previous.icon, snapshot.icon);
+        #[cfg(target_os = "macos")]
         assert_ne!(previous, snapshot);
-        let previous_revision = snapshot.icon_revision;
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(previous, snapshot);
+        let previous = snapshot.clone();
         snapshot.replace_icon(None);
         assert!(snapshot.icon.is_none());
-        assert_ne!(previous_revision, snapshot.icon_revision);
+        assert_ne!(previous, snapshot);
     }
 }
