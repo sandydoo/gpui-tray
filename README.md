@@ -130,8 +130,14 @@ let tray = Tray::builder().icon(icon).build(cx)?;
 For a GPUI image, including SVG:
 
 ```rust,ignore
-let icon = Icon::from_gpui(image, cx).build()?;
+let icon = Icon::from_gpui(&image, cx).build()?;
 ```
+
+`from_gpui` decodes the image (or renders the SVG) immediately and stores either
+the RGBA pixels or a decoding error. The source image is borrowed only during
+that call; the builder can outlive it. Cloned builders share the decoded pixels.
+`.build()` returns any stored error and validates the bitmap and configuration.
+Decoding still happens if you discard the builder without building it.
 
 ### macOS
 
@@ -146,7 +152,8 @@ let icon = Icon::from_rgba(rgba, 36, 36)
     .build()?;
 ```
 
-This displays at 18×18 points.
+This displays at 18×18 points. Scale and template settings only change metadata;
+they do not resize or re-decode the pixels.
 
 Display an SF Symbol by its system name, such as `externaldrive`:
 
